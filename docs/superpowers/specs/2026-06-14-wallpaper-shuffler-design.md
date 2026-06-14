@@ -94,7 +94,9 @@ explicitly excluded.** Anything else is ignored during folder scans.
   seconds; see config schema.)
 - Default fit mode: **Fill**.
 - Default cycle mode: **Sequential**.
-- Default autostart: **off** (false).
+- Default autostart: **on** (true). Auto-running at login is the core purpose
+  of the app, so on first launch (no config present) it writes the `HKCU\…\Run`
+  entry and ships with `autostart = true`. Remains user-toggleable in settings.
 
 ---
 
@@ -260,7 +262,7 @@ pub struct Config {
     pub interval_secs: u64,                 // default 1800 (30 min); clamp >= 60
     pub cycle_mode: CycleMode,              // default Sequential
     pub fit_mode: FitMode,                  // default Fill
-    pub autostart: bool,                    // default false
+    pub autostart: bool,                    // default true
     /// Per-monitor folder assignments, keyed by stable MonitorId.
     pub monitors: std::collections::BTreeMap<MonitorId, MonitorConfig>,
 }
@@ -534,8 +536,15 @@ seam implementations, load config, enumerate monitors, build the `Scheduler`,
 start a Win32 timer (`SetTimer`) at `interval_secs`, run the message loop, and
 handle **`WM_DISPLAYCHANGE`** (monitor hotplug) by re-enumerating + rebuilding
 playlists while preserving assignments by `MonitorId`. Logs to
-`%APPDATA%\wallpaper-shuffler\log.txt`. Single-instance is **not required**
-(out of scope) unless trivial.
+`%APPDATA%\wallpaper-shuffler\log.txt`.
+
+**Single-instance is REQUIRED.** Because autostart launches the app at login,
+a second launch must not start a competing shuffler. At startup, before doing
+any work, acquire a named mutex (`CreateMutexW` with a fixed name, e.g.
+`Global\wallpaper-shuffler-singleton`); if `GetLastError` is
+`ERROR_ALREADY_EXISTS`, exit immediately (optionally surfacing the existing
+tray icon is out of scope — just exit silently). Hold the mutex for process
+lifetime. This is a `#[cfg(windows)]` concern in `app::main`.
 
 **Dependencies:** everything. **Tested:** manual.
 
@@ -550,7 +559,7 @@ Structs are defined in §5.2. Example `config.toml`:
 interval_secs = 1800        # 30 min; minimum enforced is 60
 cycle_mode = "Sequential"   # "Sequential" | "Shuffle" | "PureRandom"
 fit_mode = "Fill"           # "Fill" | "Fit" | "Stretch" | "Center" | "Tile"
-autostart = false
+autostart = true
 
 # Per-monitor folder assignments, keyed by the stable device-path id.
 [monitors."\\\\?\\DISPLAY#DELA1B2#5&abc123&0&UID4352#{...}"]
@@ -668,8 +677,8 @@ Build pure logic + tests first (runs on any platform), Windows integration last.
 5. **M5 — Windows seam impls.** `app::monitors`, `app::wallpaper`,
    `app::autostart` behind the traits (§trait-seam). Compile on Windows.
 6. **M6 — tray + message loop + timer.** `app::tray`, `app::main` wiring, COM
-   init, `SetTimer`, `WM_DISPLAYCHANGE`, logging. App runs from the tray and
-   rotates.
+   init, single-instance named-mutex guard (§5.10), `SetTimer`,
+   `WM_DISPLAYCHANGE`, logging. App runs from the tray and rotates.
 7. **M7 — settings UI.** `app::settings_ui`: monitor list + orientation labels,
    per-monitor folders, global interval/mode/fit, autostart toggle; save +
    rebuild.
@@ -696,7 +705,10 @@ Run on the real Windows 11 machine after M5–M8:
       Pure random = repeats possible.
 - [ ] Interval setting respected; minimum clamps to 1 minute.
 - [ ] Autostart toggle adds/removes the `HKCU\...\Run\wallpaper-shuffler` value
-      pointing at the exe; app launches at login when enabled.
+      pointing at the exe; app launches at login (enabled by default on a fresh
+      install).
+- [ ] Launching a second instance exits immediately (named-mutex guard); only
+      one tray icon and one shuffler remain.
 - [ ] Unplug a monitor / plug a new one → app re-enumerates; assignments
       preserved by device-path id; new monitor shows as unconfigured until
       assigned.
