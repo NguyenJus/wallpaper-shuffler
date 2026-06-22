@@ -68,6 +68,28 @@ pub mod app_state {
         pub quit_requested: bool,
     }
 
+    /// Build an assignment list from a monitor slice and config: available
+    /// monitors only, each paired with its configured folder list (empty if
+    /// unconfigured). Used both at startup (before `AppState` exists) and by
+    /// `AppState::current_assignments` to avoid duplicating the same logic.
+    pub fn build_assignments(
+        monitors: &[MonitorInfo],
+        config: &Config,
+    ) -> Vec<(MonitorId, Vec<PathBuf>)> {
+        monitors
+            .iter()
+            .filter(|m| m.available)
+            .map(|m| {
+                let folders = config
+                    .monitors
+                    .get(&m.id)
+                    .map(|mc| mc.folders.clone())
+                    .unwrap_or_default();
+                (m.id.clone(), folders)
+            })
+            .collect()
+    }
+
     impl AppState {
         pub fn new(
             config: Config,
@@ -109,18 +131,7 @@ pub mod app_state {
         /// Assignment list for the *currently live* monitors, looking up each
         /// monitor's folders by id (unknown monitors => empty / unconfigured).
         pub fn current_assignments(&self) -> Vec<(MonitorId, Vec<PathBuf>)> {
-            self.monitors
-                .iter()
-                .map(|m| {
-                    let folders = self
-                        .config
-                        .monitors
-                        .get(&m.id)
-                        .map(|mc| mc.folders.clone())
-                        .unwrap_or_default();
-                    (m.id.clone(), folders)
-                })
-                .collect()
+            build_assignments(&self.monitors, &self.config)
         }
 
         /// (Re)build the scheduler's playlists from the current config + live
@@ -374,18 +385,8 @@ fn main() {
         }
     };
     {
-        // Build initial assignments inline (AppState not yet constructed).
-        let assignments: Vec<_> = monitors
-            .iter()
-            .map(|m| {
-                let folders = config
-                    .monitors
-                    .get(&m.id)
-                    .map(|mc| mc.folders.clone())
-                    .unwrap_or_default();
-                (m.id.clone(), folders)
-            })
-            .collect();
+        // Build initial assignments (AppState not yet constructed).
+        let assignments = app_state::build_assignments(&monitors, &config);
         scheduler.rebuild(&assignments);
     }
 

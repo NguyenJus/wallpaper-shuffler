@@ -25,12 +25,13 @@ pub enum FitMode {
 }
 
 /// A live monitor as enumerated from the OS.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MonitorInfo {
     pub id: MonitorId,
-    pub width: u32,
-    pub height: u32,
-    pub orientation: Orientation, // derived: height > width => Portrait
+    pub width: u32,                       // 0 when unknown
+    pub height: u32,                      // 0 when unknown
+    pub orientation: Option<Orientation>, // None when unavailable / dims unknown
+    pub available: bool,                  // false => skip wallpaper application
 }
 
 /// Derive orientation from physical dimensions.
