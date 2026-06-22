@@ -246,10 +246,11 @@ mod imp {
             .expect("settings layout");
     }
 
-    fn orientation_label(o: Orientation) -> &'static str {
+    fn orientation_label(o: Option<Orientation>) -> &'static str {
         match o {
-            Orientation::Landscape => "Landscape",
-            Orientation::Portrait => "Portrait",
+            Some(Orientation::Landscape) => "Landscape",
+            Some(Orientation::Portrait) => "Portrait",
+            None => "Unavailable",
         }
     }
 
