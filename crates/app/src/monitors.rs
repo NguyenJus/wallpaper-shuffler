@@ -15,9 +15,8 @@ use windows::Win32::{
 
 #[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
-    EnumDisplayDevicesW, EnumDisplaySettingsW,
-    DISPLAY_DEVICEW, DEVMODEW,
-    ENUM_CURRENT_SETTINGS, DISPLAY_DEVICE_ACTIVE,
+    EnumDisplayDevicesW, EnumDisplaySettingsW, DEVMODEW, DISPLAY_DEVICEW, DISPLAY_DEVICE_ACTIVE,
+    ENUM_CURRENT_SETTINGS,
 };
 
 #[cfg(windows)]
@@ -233,21 +232,20 @@ impl MonitorEnumerator for DesktopWallpaperMonitors {
 
             // Attempt GetMonitorRECT — convert Err to None (no ? propagation).
             let wide_id: Vec<u16> = id.encode_utf16().chain(std::iter::once(0u16)).collect();
-            let primary_dims: Option<(u32, u32)> = unsafe {
-                idw.GetMonitorRECT(windows::core::PCWSTR(wide_id.as_ptr()))
-            }
-            .ok()
-            .map(|rect| {
-                (
-                    (rect.right - rect.left).unsigned_abs(),
-                    (rect.bottom - rect.top).unsigned_abs(),
-                )
-            })
-            // A zero-area RECT (power-save / virtual / buggy driver) is treated as
-            // unavailable; pass None so the 3-step policy falls through to fallback
-            // or marks the monitor unavailable rather than setting available=true
-            // with width=0 / height=0.
-            .filter(|&(w, h)| w > 0 && h > 0);
+            let primary_dims: Option<(u32, u32)> =
+                unsafe { idw.GetMonitorRECT(windows::core::PCWSTR(wide_id.as_ptr())) }
+                    .ok()
+                    .map(|rect| {
+                        (
+                            (rect.right - rect.left).unsigned_abs(),
+                            (rect.bottom - rect.top).unsigned_abs(),
+                        )
+                    })
+                    // A zero-area RECT (power-save / virtual / buggy driver) is treated as
+                    // unavailable; pass None so the 3-step policy falls through to fallback
+                    // or marks the monitor unavailable rather than setting available=true
+                    // with width=0 / height=0.
+                    .filter(|&(w, h)| w > 0 && h > 0);
 
             // 3-step policy: primary → fallback → unavailable.
             build_monitor_info(id.clone(), primary_dims, table)
@@ -286,21 +284,33 @@ mod tests {
 
     #[test]
     fn match_fallback_dims_exact_match() {
-        let table = vec![(r"\\?\DISPLAY#ACR0763#5&abc&0&UID0#{GUID}".to_string(), 2560, 1440)];
+        let table = vec![(
+            r"\\?\DISPLAY#ACR0763#5&abc&0&UID0#{GUID}".to_string(),
+            2560,
+            1440,
+        )];
         let result = match_fallback_dims(r"\\?\DISPLAY#ACR0763#5&abc&0&UID0#{GUID}", &table);
         assert_eq!(result, Some((2560, 1440)));
     }
 
     #[test]
     fn match_fallback_dims_case_insensitive() {
-        let table = vec![(r"\\?\DISPLAY#ACR0763#5&ABC&0&UID0#{GUID}".to_string(), 1920, 1200)];
+        let table = vec![(
+            r"\\?\DISPLAY#ACR0763#5&ABC&0&UID0#{GUID}".to_string(),
+            1920,
+            1200,
+        )];
         let result = match_fallback_dims(r"\\?\display#acr0763#5&abc&0&uid0#{guid}", &table);
         assert_eq!(result, Some((1920, 1200)));
     }
 
     #[test]
     fn match_fallback_dims_no_match() {
-        let table = vec![(r"\\?\DISPLAY#OTHER#1&foo&0&UID0#{GUID}".to_string(), 1920, 1080)];
+        let table = vec![(
+            r"\\?\DISPLAY#OTHER#1&foo&0&UID0#{GUID}".to_string(),
+            1920,
+            1080,
+        )];
         let result = match_fallback_dims(r"\\?\DISPLAY#ACR0763#5&abc&0&UID0#{GUID}", &table);
         assert_eq!(result, None);
     }
@@ -330,7 +340,11 @@ mod tests {
 
     #[test]
     fn build_monitor_info_fallback_recovered_acer_case() {
-        let fallback = vec![(r"\\?\DISPLAY#ACR0763#5&abc&0&UID0#{GUID}".to_string(), 2560, 1440)];
+        let fallback = vec![(
+            r"\\?\DISPLAY#ACR0763#5&abc&0&UID0#{GUID}".to_string(),
+            2560,
+            1440,
+        )];
         let mi = build_monitor_info(
             r"\\?\DISPLAY#ACR0763#5&abc&0&UID0#{GUID}".to_string(),
             None,
