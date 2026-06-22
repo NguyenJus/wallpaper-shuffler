@@ -1,3 +1,6 @@
 /target
 Cargo.lock
 *.log
+
+# Local design specs (historical, not tracked)
+docs/specs/
